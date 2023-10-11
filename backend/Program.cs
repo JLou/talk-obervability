@@ -17,11 +17,10 @@ var serviceVersion = "2.3.0";
 var meter = new Meter(serviceName);
 var counter = meter.CreateCounter<long>("backend.fetched-branches");
 
-
-
 // Add services to the container.
 
 builder.Services.AddControllers();
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -53,7 +52,8 @@ builder.Services
     })
     .WithMetrics(meterProviderBuilder =>
     {
-        meterProviderBuilder.AddAspNetCoreInstrumentation()
+        meterProviderBuilder
+            .AddAspNetCoreInstrumentation()
             .AddMeter(meter.Name)
             .AddHttpClientInstrumentation()
             .AddEventCountersInstrumentation(c =>
@@ -72,8 +72,7 @@ builder.Services
             options.Endpoint = new Uri("http://localhost:4317");
         });
         // The rest of your setup code goes here too
-    })
-    .StartWithHost();
+    });
 
 // builder.Logging.ClearProviders();
 builder.Logging.AddEventSourceLogger();
@@ -102,31 +101,35 @@ app.UseAuthorization();
 
 var MyActivitySource = new ActivitySource("PickName");
 
+app.MapGet(
+    "/backend-hello",
+    (ILogger<Program> logger) =>
+    {
+        using var activity = MyActivitySource.StartActivity("Pick a name");
 
-app.MapGet("/backend-hello", (ILogger<Program> logger) =>
-{
-    using var activity =  MyActivitySource.StartActivity("Pick a name");
-    
-    
-    var names = new[] { "Jonathan", "Martin", "Martin 🐼", "JL" };
-    var rng = new Random();
+        var names = new[] { "Jonathan", "Martin", "Martin 🐼", "JL" };
+        var rng = new Random();
 
-    var idx = rng.Next(0, names.Length);
+        var idx = rng.Next(0, names.Length);
 
-    activity?.AddEvent(new ActivityEvent($"Picked {names[idx]}"));
-    logger.LogInformation("[Log] picked {Name}", names[idx]);
+        activity?.AddEvent(new ActivityEvent($"Picked {names[idx]}"));
+        logger.LogInformation("[Log] picked {Name}", names[idx]);
 
-    return names[idx];
-});
+        return names[idx];
+    }
+);
 
-app.MapGet("/backend-sql", async ( [FromServices] PdsContext db) =>
-{ 
-    using var activity =  MyActivitySource.StartActivity("Getting all branches");
-    activity?.AddEvent(new ActivityEvent("Fetching all branches via sql"));
-    var r =  await db.Friends.ToListAsync();
+app.MapGet(
+    "/backend-sql",
+    async ([FromServices] PdsContext db) =>
+    {
+        using var activity = MyActivitySource.StartActivity("Getting all branches");
+        activity?.AddEvent(new ActivityEvent("Fetching all branches via sql"));
+        var r = await db.Friends.ToListAsync();
 
-    counter.Add(r.Count);
-    return r;
-});
+        counter.Add(r.Count);
+        return r;
+    }
+);
 
 app.Run();
