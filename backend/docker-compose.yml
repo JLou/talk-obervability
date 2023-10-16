@@ -1,0 +1,16 @@
+version: "3.9"
+name: observability-backend
+services:
+  webservice:
+    container_name: observability-backend
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      args:
+        buildImage: dvaew1afahubacr02.azurecr.io/factory/build/linux/dotnet:7.0-ubi9
+        runtimeImage: dvaew1afahubacr02.azurecr.io/factory/runtime/linux/dotnet:7.0-ubi9
+        aspnetcorePort: 80
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "8081:80"

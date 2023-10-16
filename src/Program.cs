@@ -23,10 +23,12 @@ builder.Services.AddHttpClient();
 
 builder.Services
     .AddOpenTelemetry()
-    .ConfigureResource((c) =>
-    {
-        c.AddService(serviceName: serviceName, serviceVersion: serviceVersion);
-    })
+    .ConfigureResource(
+        (c) =>
+        {
+            c.AddService(serviceName: serviceName, serviceVersion: serviceVersion);
+        }
+    )
     .WithTracing(tracerProviderBuilder =>
     {
         tracerProviderBuilder
@@ -52,19 +54,19 @@ builder.Services
             .AddRuntimeInstrumentation()
             .AddProcessInstrumentation()
             .AddMeter("SayHello")
-            // .AddEventCountersInstrumentation(c =>
-            // {
-            //     // https://learn.microsoft.com/en-us/dotnet/core/diagnostics/available-counters?WT.mc_id=DT-MVP-5003978
-            //     c.AddEventSources(
-            //         "Microsoft.AspNetCore.Hosting",
-            //         "System.Net.Http",
-            //         "System.Net.Sockets",
-            //         "System.Net.NameResolution",
-            //         "System.Net.Security",
-            //         "Microsoft-AspNetCore-Server-Kestrel" 
-            //     );
-            // })
-            ;
+        // .AddEventCountersInstrumentation(c =>
+        // {
+        //     // https://learn.microsoft.com/en-us/dotnet/core/diagnostics/available-counters?WT.mc_id=DT-MVP-5003978
+        //     c.AddEventSources(
+        //         "Microsoft.AspNetCore.Hosting",
+        //         "System.Net.Http",
+        //         "System.Net.Sockets",
+        //         "System.Net.NameResolution",
+        //         "System.Net.Security",
+        //         "Microsoft-AspNetCore-Server-Kestrel"
+        //     );
+        // })
+        ;
         b.AddOtlpExporter(options =>
         {
             options.Endpoint = new Uri("http://localhost:4317");
@@ -86,11 +88,12 @@ builder.Logging.AddOpenTelemetry(options =>
     options.AddOtlpExporter(otlpOptions =>
     {
         // Use IConfiguration directly for Otlp exporter endpoint option.
-        otlpOptions.Endpoint = new Uri("http://localhost:4317");
+        otlpOptions.Endpoint = new Uri(
+            builder.Configuration.GetValue<string>("Backend_BaseUrl") ?? ""
+        );
     });
     options.AddConsoleExporter();
 });
-
 
 var app = builder.Build();
 
@@ -108,7 +111,11 @@ app.UseHttpsRedirection();
 var MyActivitySource = new ActivitySource("SayHello");
 
 app.MapGet(
-    "/hello", async ([FromServices] ILogger<Program> logger, [FromServices] IHttpClientFactory httpClientFactory) =>
+    "/hello",
+    async (
+        [FromServices] ILogger<Program> logger,
+        [FromServices] IHttpClientFactory httpClientFactory
+    ) =>
     {
         // Track work inside of the request
         using var activity = MyActivitySource.StartActivity(name: "Test2");
@@ -117,32 +124,30 @@ app.MapGet(
         activity?.SetTag("bar", "Hello, World!");
         activity?.SetTag("baz", new int[] { 1, 2, 3 });
 
-
         var client = httpClientFactory.CreateClient();
 
         var response = await client.GetAsync("http://localhost:5058/backend-hello");
         var name = await response.Content.ReadAsStringAsync();
         activity?.AddEvent(new ActivityEvent($"Said hello to {name}"));
-        
+
         logger.LogInformation("COUCOU PETITE perruche");
         return $"Hello {name}!";
     }
 );
 
 app.MapGet(
-    "/sql", async ([FromServices] IHttpClientFactory httpClientFactory) =>
+    "/sql",
+    async ([FromServices] IHttpClientFactory httpClientFactory) =>
     {
         using var activity = MyActivitySource.StartActivity(name: "Test-sql");
 
         activity?.SetTag("foo", 1);
 
-
         var client = httpClientFactory.CreateClient();
 
         var response = await client.GetAsync("http://localhost:5058/backend-sql");
 
-
-        var list = await response.Content.ReadFromJsonAsync < List<Friend>>();
+        var list = await response.Content.ReadFromJsonAsync<List<Friend>>();
         var rng = new Random();
 
         var idx = rng.Next(0, list.Count);
